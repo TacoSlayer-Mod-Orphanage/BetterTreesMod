@@ -53,17 +53,14 @@ namespace BetterTreesMod
             btParentTreeObject = GameObject.Instantiate(bundle.LoadAsset<GameObject>("AllMapsPrefab"));
             GameObject.DontDestroyOnLoad(btParentTreeObject);
         }
-        public override void OnLateInitializeMelon()
-        {
-            if (btParentTreeObject == null)
-                LoadAsset();
-        }
 
         //Runs when a unity scene is loaded, finds all tree locations and then runs a function to disable the original tree and create a particle system in its place
 
         public override void OnSceneWasLoaded(int buildIndex, string sceneName)
         {
             if (sceneName == "Loader") return;
+            if (btParentTreeObject == null)
+                LoadAsset();
             for (int i = 0; i < btParentTreeObject.transform.childCount; i++)
             {
                 btParentTreeObject.transform.GetChild(i).gameObject.SetActive(false);
@@ -227,7 +224,6 @@ namespace BetterTreesMod
             var SwapLightmap = typeof(RumbleTrees.Core).GetMethod("SwapLightmap", BindingFlags.NonPublic | BindingFlags.Instance);
             var selectedLeafMaterial = typeof(RumbleTrees.Core).GetField("selectedLeafMaterial", BindingFlags.NonPublic | BindingFlags.Instance);
             var selectedLeafColour = typeof(RumbleTrees.Core).GetField("selectedLeafColour", BindingFlags.NonPublic | BindingFlags.Instance);
-            MelonLogger.Msg(selectedLeafColour == null);
             var RAINBOWLEAVES = typeof(RumbleTrees.Core).GetMethod("RAINBOWLEAVES", BindingFlags.NonPublic | BindingFlags.Instance);
             if (!(bool)leavesEnabled.GetValue(__instance) && (sceneID == 2 || sceneID == 4))
             {
@@ -238,7 +234,6 @@ namespace BetterTreesMod
                     MelonCoroutines.Start(SwapLightmap.Invoke(__instance, new object[] { sceneName, renderer, false }) as IEnumerator);
                 }
             }
-            MelonLogger.Msg("Got here 3");
             leavesEnabled.SetValue(__instance, true);
             selectedLeafMaterial.SetValue(__instance, "vanilla");
             switch (colour.ToLower())
@@ -276,7 +271,6 @@ namespace BetterTreesMod
                     }
                     break;
             }
-            MelonLogger.Msg("Got here 4");
             return false;
         }
     }
@@ -305,7 +299,6 @@ namespace BetterTreesMod
 
             string setting = (string)RumbleTreesSettings.Settings[6].SavedValue;
             setSelectedLeafColour.Invoke(instance, new object[] { setting });
-            MelonLogger.Msg("Finished invoke");
             Core.BT_UpdateLeafColor((Color)selectedLeafColour.GetValue(instance));
         }
     }
