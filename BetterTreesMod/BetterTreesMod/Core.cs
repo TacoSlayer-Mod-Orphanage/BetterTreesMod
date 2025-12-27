@@ -54,16 +54,8 @@ namespace BetterTreesMod
         //Loading asset bundles
         public void LoadAsset()
         {
-            using (System.IO.Stream bundleStream = MelonAssembly.Assembly.GetManifestResourceStream("BetterTreesMod.LeavesAsset.leavesassetbundle"))
-            {
-                byte[] bundleBytes = new byte[bundleStream.Length];
-                bundleStream.Read(bundleBytes, 0, bundleBytes.Length);
-                Il2CppAssetBundle bundle = Il2CppAssetBundleManager.LoadFromMemory(bundleBytes);
-                btParentTreeObject = GameObject.Instantiate(bundle.LoadAsset<GameObject>("AllMapsPrefab"));
-
-                GameObject.DontDestroyOnLoad(btParentTreeObject);
-            }
-
+            AssetBundle bundle = Calls.LoadAssetBundleFromStream(this, "BetterTreesMod.LeavesAsset.leavesassetbundle");
+            btParentTreeObject = GameObject.Instantiate(bundle.LoadAsset<GameObject>("AllMapsPrefab"));
         }
         public override void OnLateInitializeMelon()
         {
