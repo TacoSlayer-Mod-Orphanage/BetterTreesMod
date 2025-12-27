@@ -1,20 +1,10 @@
-﻿using MelonLoader;
-
+﻿using HarmonyLib;
+using MelonLoader;
 using RumbleModdingAPI;
-
-using System.Text.Json;
-using System.Collections;
-using static UnityEngine.Rendering.Universal.UniversalRenderPipeline.Profiling.Pipeline;
-using UnityEngine.Experimental.Rendering;
-using UnityEngine;
-using static RumbleModdingAPI.Calls;
-using Il2CppPhoton.Compression;
-using static UnityEngine.ParticleSystem;
-using HarmonyLib;
 using RumbleModUI;
-using static Il2CppSystem.Linq.Expressions.Interpreter.NullableMethodCallInstruction;
-using Il2CppSystem.Runtime.Remoting.Messaging;
-using static MelonLoader.MelonLogger;
+using System.Collections;
+using System.Reflection;
+using UnityEngine;
 using UnityEngine.VFX;
 
 [assembly: MelonInfo(typeof(BetterTreesMod.Core), "BetterTreesMod", "1.0.0", "f r o g", null)]
@@ -22,11 +12,11 @@ using UnityEngine.VFX;
 
 namespace BetterTreesMod
 {
-    [HarmonyPatch(typeof(RUMBLECherryBlossoms.Core), "UpdateColours")]
+    [HarmonyPatch(typeof(RumbleTrees.Core), "UpdateColours")]
     public class Core : MelonMod
     {
         //variables
-        private List<GameObject> leafObjects = new List<GameObject>();
+        internal static List<GameObject> leafObjects = new List<GameObject>();
         private List<GameObject> rootObjects = new List<GameObject>();
         private List<GameObject> betterLeafObjects = new List<GameObject>();
         private List<ParticleSystemRenderer> particleSystemRenderers = new List<ParticleSystemRenderer>();
@@ -63,9 +53,12 @@ namespace BetterTreesMod
         {
             AssetBundle bundle = Calls.LoadAssetBundleFromStream(this, "BetterTreesMod.LeavesAsset.leavesassetbundle");
             btParentTreeObject = GameObject.Instantiate(bundle.LoadAsset<GameObject>("AllMapsPrefab"));
+            GameObject.DontDestroyOnLoad(btParentTreeObject);
         }
         public override void OnLateInitializeMelon()
         {
+            if (btParentTreeObject == null)
+                LoadAsset();
             Core.bt_Core = this;
         }
 
@@ -73,9 +66,7 @@ namespace BetterTreesMod
 
         public override void OnSceneWasLoaded(int buildIndex, string sceneName)
         {
-            if (btParentTreeObject == null)
-                LoadAsset();
-
+            if (sceneName == "Loader") return;
             for (int i = 0; i < btParentTreeObject.transform.childCount; i++)
             {
                 btParentTreeObject.transform.GetChild(i).gameObject.SetActive(false);
@@ -182,7 +173,7 @@ namespace BetterTreesMod
             }
         }
 
-        public void BT_UpdateColors(Color colorToChangeTo)
+        public void BT_UpdateVFXsColor(Color colorToChangeTo)
         {
             if (this.VFXsObject != null)
             {
@@ -203,7 +194,10 @@ namespace BetterTreesMod
                     vfx.SetGradient(FLG, gradient);
                 }
             }
+        }
 
+        public void BT_UpdateLeafColor(Color colorToChangeTo)
+        {
             foreach (ParticleSystemRenderer p in particleSystemRenderers)
             {
                 p.material.SetColor("_Color", colorToChangeTo);
@@ -212,99 +206,106 @@ namespace BetterTreesMod
     }
 
 
-    [HarmonyPatch(typeof(RUMBLECherryBlossoms.Core), nameof(RUMBLECherryBlossoms.Core.UpdateColours))]
+    [HarmonyPatch(typeof(RumbleTrees.Core), "UpdateLeafColour")]
     public static class UpdateColorPatch
     {
-        private static bool Prefix(bool reset, string type, RUMBLECherryBlossoms.Core __instance)
+        private static bool Prefix(ref Color colour)
         {
-            Core.bt_Core.BT_UpdateColors(__instance.selectedLeafColour);
+            Core.bt_Core.BT_UpdateLeafColor(colour);
             return false;
         }
     }
 
     //Replaces the rumble trees color set code with basically tyhe same thing but using different presets 
-    [HarmonyPatch(typeof(RUMBLECherryBlossoms.Core), nameof(RUMBLECherryBlossoms.Core.setSelectedColour))]
+    [HarmonyPatch(typeof(RumbleTrees.Core), "setSelectedLeafColour")]
     public static class SelectedColorPatch
     {
 
-        private static bool Prefix(string colour, bool custom, RUMBLECherryBlossoms.Core __instance)
+        private static bool Prefix(string colour, ref RumbleTrees.Core __instance)
         {
-            if (__instance.rainbowCoroutine != null)
+            var rainbowLeafCoroutine = typeof(RumbleTrees.Core).GetField("rainbowLeafCoroutine", BindingFlags.NonPublic | BindingFlags.Instance);
+            var isRainbow = typeof(RumbleTrees.Core).GetField("isRainbow", BindingFlags.NonPublic | BindingFlags.Instance);
+            var leavesEnabled = typeof(RumbleTrees.Core).GetField("enabled", BindingFlags.NonPublic | BindingFlags.Instance);
+            int sceneID = (int)typeof(RumbleTrees.Core).GetField("sceneID", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(__instance);
+            var SwapLightmap = typeof(RumbleTrees.Core).GetMethod("SwapLightmap", BindingFlags.NonPublic | BindingFlags.Instance);
+            var selectedLeafMaterial = typeof(RumbleTrees.Core).GetField("selectedLeafMaterial", BindingFlags.NonPublic | BindingFlags.Instance);
+            var selectedLeafColour = typeof(RumbleTrees.Core).GetField("selectedLeafColour", BindingFlags.NonPublic | BindingFlags.Instance);
+            var RAINBOWLEAVES = typeof(RumbleTrees.Core).GetMethod("RAINBOWLEAVES", BindingFlags.NonPublic | BindingFlags.Instance);
+            if (!(bool)leavesEnabled.GetValue(__instance) && (sceneID == 2 || sceneID == 4))
             {
-                MelonCoroutines.Stop(__instance.rainbowCoroutine);
+                foreach (GameObject tree in Core.leafObjects)
+                {
+                    MeshRenderer renderer = tree.GetComponent<MeshRenderer>();
+                    string sceneName = Calls.Scene.GetSceneName();
+                    MelonCoroutines.Start(SwapLightmap.Invoke(__instance, new object[] { sceneName, renderer, false }) as IEnumerator);
+                }
             }
-            __instance.isRainbow = false;
-            if (!__instance.leavesEnabled && (__instance.sceneID == 2 || __instance.sceneID == 4))
-            {
-                MelonCoroutines.Start(__instance.SwapLightmap(false));
-            }
-            __instance.leavesEnabled = true;
-            __instance.stoneLeaves = "none";
+            leavesEnabled.SetValue(__instance, true);
+            selectedLeafMaterial.SetValue(__instance, "vanilla");
             switch (colour.ToLower())
             {
                 case "cherry":
                     {
-                        __instance.selectedLeafColour = Core.bt_Core.bt_Cherry;
+                        selectedLeafColour.SetValue(__instance, Core.bt_Core.bt_Cherry);
                         break;
                     }
                 case "orange":
                     {
-                        __instance.selectedLeafColour = Core.bt_Core.bt_Orange;
+                        selectedLeafColour.SetValue(__instance, Core.bt_Core.bt_Orange);
                         break;
                     }
                 case "vanilla":
                     {
-                        __instance.selectedLeafColour = Core.bt_Core.bt_Leaves;
+                        selectedLeafColour.SetValue(__instance, Core.bt_Core.bt_Leaves);
                         break;
                     }
                 case "yellow":
                     {
-                        __instance.selectedLeafColour = Core.bt_Core.bt_Yellow;
+                        selectedLeafColour.SetValue(__instance, Core.bt_Core.bt_Yellow);
                         break;
                     }
                 case "red":
                     {
-                        __instance.selectedLeafColour = Core.bt_Core.bt_Red;
+                        selectedLeafColour.SetValue(__instance, Core.bt_Core.bt_Red);
                         break;
                     }
                 case "rainbow":
-                    __instance.isRainbow = true;
-                    if (__instance.sceneID != -1)
+                    isRainbow.SetValue(__instance, true);
+                    if (sceneID != -1)
                     {
-                        __instance.rainbowCoroutine = MelonCoroutines.Start(__instance.RAINBOW());
+                        rainbowLeafCoroutine.SetValue(__instance, MelonCoroutines.Start(RAINBOWLEAVES.Invoke(__instance, new object[] { }) as IEnumerator));
                     }
                     break;
             }
             return false;
         }
     }
-    [HarmonyPatch(typeof(RUMBLECherryBlossoms.Core), nameof(RUMBLECherryBlossoms.Core.OnSceneWasLoaded))]
+    [HarmonyPatch(typeof(RumbleTrees.Core), nameof(RumbleTrees.Core.OnSceneWasLoaded))]
     public static class SceneLoadPatch
     {
         //This reloads the colors from settings on sceneload after bettertrees has loaded the new leaves
         //There is a delay timer because this postfix and the loading of the new trees run at almost exactly the same time, which means occasionally this function runs
         //before rumbletrees has created the leaf models, causing the leaves to never change color 
         private static float waitTime = 0.5f;
-        private static void Postfix(int buildIndex, string sceneName, RUMBLECherryBlossoms.Core __instance)
+        private static void Postfix(int buildIndex, string sceneName, ref RumbleTrees.Core __instance)
         {
             MelonCoroutines.Start(WaitForSceneColors(__instance));
         }
 
 
-        static IEnumerator WaitForSceneColors(RUMBLECherryBlossoms.Core instance)
+        static IEnumerator WaitForSceneColors(RumbleTrees.Core instance)
         {
-            
             yield return new WaitForSeconds(waitTime);
-            string setting = (string)instance.RumbleTrees.Settings[6].SavedValue;
-            if (instance.checkCustom(setting))
-            {
-                instance.setCustom(setting, "leaves");
-            }
-            else
-            {
-                instance.setSelectedColour(setting, false);
-            }
-            Core.bt_Core.BT_UpdateColors(instance.selectedLeafColour);
+
+            if (Calls.Scene.GetSceneName() == "Loader") yield break;
+            var field = typeof(RumbleTrees.Core).GetField("RumbleTrees", BindingFlags.NonPublic | BindingFlags.Instance);
+            var RumbleTreesSettings = (Mod)field.GetValue(instance);
+            var setSelectedLeafColour = typeof(RumbleTrees.Core).GetMethod("setSelectedLeafColour", BindingFlags.NonPublic | BindingFlags.Instance);
+            var selectedLeafColour = typeof(RumbleTrees.Core).GetField("selectedLeafColour", BindingFlags.NonPublic | BindingFlags.Instance);
+
+            string setting = (string)RumbleTreesSettings.Settings[6].SavedValue;
+            setSelectedLeafColour.Invoke(instance, new object[] { setting });
+            Core.bt_Core.BT_UpdateLeafColor((Color)selectedLeafColour.GetValue(instance));
         }
     }
 }
